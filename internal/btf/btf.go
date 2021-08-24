@@ -481,13 +481,34 @@ func (s *Spec) Program(name string, length uint64) (*Program, error) {
 // Returns an error wrapping ErrNotFound if no matching
 // type exists in spec.
 func (s *Spec) FindType(name string, typ Type) error {
-	var (
-		wanted    = reflect.TypeOf(typ)
-		candidate Type
-	)
+	wanted := reflect.TypeOf(typ)
+
+	result, err := s.find(name, func(typ Type) bool {
+		return reflect.TypeOf(typ) == wanted
+	})
+
+	if err != nil {
+		return err
+	}
+
+	value := reflect.Indirect(reflect.ValueOf(result))
+	reflect.Indirect(reflect.ValueOf(typ)).Set(value)
+	return nil
+}
+
+// Find a type using just a name.
+//
+// Returns an error wrapping ErrNotFound if no matching
+// type exists in spec.
+func (s *Spec) Find(name string) (NamedType, error) {
+	return s.find(name, nil)
+}
+
+func (s *Spec) find(name string, pred func(Type) bool) (NamedType, error) {
+	var candidate NamedType
 
 	for _, typ := range s.namedTypes[essentialName(name)] {
-		if reflect.TypeOf(typ) != wanted {
+		if pred != nil && !pred(typ) {
 			continue
 		}
 
@@ -497,19 +518,17 @@ func (s *Spec) FindType(name string, typ Type) error {
 		}
 
 		if candidate != nil {
-			return fmt.Errorf("type %s: multiple candidates for %T", name, typ)
+			return nil, fmt.Errorf("type %s: multiple candidates", name)
 		}
 
 		candidate = typ
 	}
 
 	if candidate == nil {
-		return fmt.Errorf("type %s: %w", name, ErrNotFound)
+		return nil, fmt.Errorf("type %s: %w", name, ErrNotFound)
 	}
 
-	value := reflect.Indirect(reflect.ValueOf(candidate))
-	reflect.Indirect(reflect.ValueOf(typ)).Set(value)
-	return nil
+	return candidate, nil
 }
 
 // Handle is a reference to BTF loaded into the kernel.
