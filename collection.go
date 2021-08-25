@@ -27,6 +27,9 @@ type CollectionSpec struct {
 	Maps     map[string]*MapSpec
 	Programs map[string]*ProgramSpec
 
+	// The BTF used by maps and programs.
+	BTF *btf.Spec
+
 	// ByteOrder specifies whether the ELF was compiled for
 	// big-endian or little-endian architectures.
 	ByteOrder binary.ByteOrder
@@ -383,6 +386,10 @@ func (cl *collectionLoader) loadMap(mapName string) (*Map, error) {
 		return nil, fmt.Errorf("missing map %s", mapName)
 	}
 
+	if cl.coll.BTF != mapSpec.BTF.Spec {
+		return nil, fmt.Errorf("map %s: BTF doesn't match collection", mapName)
+	}
+
 	m, err := newMapWithOptions(mapSpec, cl.opts.Maps, cl.handles)
 	if err != nil {
 		return nil, fmt.Errorf("map %s: %w", mapName, err)
@@ -400,6 +407,10 @@ func (cl *collectionLoader) loadProgram(progName string) (*Program, error) {
 	progSpec := cl.coll.Programs[progName]
 	if progSpec == nil {
 		return nil, fmt.Errorf("unknown program %s", progName)
+	}
+
+	if cl.coll.BTF != progSpec.BTF.Spec() {
+		return nil, fmt.Errorf("program %s: BTF doesn't match collection", progName)
 	}
 
 	progSpec = progSpec.Copy()
