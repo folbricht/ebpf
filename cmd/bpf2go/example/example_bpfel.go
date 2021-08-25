@@ -13,6 +13,20 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type exampleBarfoo struct {
+	Bar int64
+	Baz bool
+	_   [3]byte
+	Boo exampleE
+}
+
+type exampleE int32
+
+const (
+	exampleEHOOPY exampleE = 0
+	exampleEFROOD exampleE = 1
+)
+
 // loadExample returns the embedded CollectionSpec for example.
 func loadExample() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_ExampleBytes)

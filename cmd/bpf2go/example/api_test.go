@@ -1,7 +1,9 @@
 package main
 
 import (
+	"reflect"
 	"testing"
+	"unsafe"
 
 	// Raise RLIMIT_MEMLOCK
 	_ "github.com/cilium/ebpf/internal/testutils"
@@ -31,5 +33,33 @@ func TestLoadingObjects(t *testing.T) {
 
 	if objs.Map1 == nil {
 		t.Error("Loading returns an object with nil maps")
+	}
+}
+
+func TestTypes(t *testing.T) {
+	if exampleEHOOPY != 0 {
+		t.Error("Expected exampleEHOOPY to be 0, got", exampleEHOOPY)
+	}
+	if exampleEFROOD != 1 {
+		t.Error("Expected exampleEFROOD to be 0, got", exampleEFROOD)
+	}
+
+	e := exampleE(0)
+	if size := unsafe.Sizeof(e); size != 4 {
+		t.Error("Expected size of exampleE to be 4, got", size)
+	}
+
+	bf := exampleBarfoo{}
+	if size := unsafe.Sizeof(bf); size != 16 {
+		t.Error("Expected size of exampleE to be 16, got", size)
+	}
+	if reflect.TypeOf(bf.Bar).Kind() != reflect.Int64 {
+		t.Error("Expected exampleBarfoo.Bar to be int64")
+	}
+	if reflect.TypeOf(bf.Baz).Kind() != reflect.Bool {
+		t.Error("Expected exampleBarfoo.Baz to be bool")
+	}
+	if reflect.TypeOf(bf.Boo) != reflect.TypeOf(e) {
+		t.Error("Expected examplebarfoo.Boo to be exampleE")
 	}
 }

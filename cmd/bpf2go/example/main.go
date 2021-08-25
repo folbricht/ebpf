@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang-9 example ../testdata/minimal.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang-11 -type e -type barfoo example ../testdata/minimal.c
 
 func main() {
 	var objs exampleObjects

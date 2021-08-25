@@ -75,6 +75,7 @@ func run(stdout io.Writer, pkg, outputDir string, args []string) (err error) {
 	fs.StringVar(&b2g.tags, "tags", "", "list of Go build tags to include in generated files")
 	flagTarget := fs.String("target", "bpfel,bpfeb", "clang target to compile for")
 	fs.StringVar(&b2g.makeBase, "makebase", "", "write make compatible depinfo files relative to `directory`")
+	fs.Var(&b2g.cTypes, "type", "`Name` of a type to generate a Go declaration for")
 
 	fs.SetOutput(stdout)
 	fs.Usage = func() {
@@ -174,6 +175,20 @@ func run(stdout io.Writer, pkg, outputDir string, args []string) (err error) {
 	return nil
 }
 
+type cTypes []string
+
+var _ flag.Value = (*cTypes)(nil)
+
+func (ct *cTypes) String() string {
+	return fmt.Sprint(*ct)
+}
+
+func (ct *cTypes) Set(value string) error {
+	// TODO: Validate contents of value somehow?
+	*ct = append(*ct, value)
+	return nil
+}
+
 type bpf2go struct {
 	stdout io.Writer
 	// Absolute path to a .c file.
@@ -188,6 +203,8 @@ type bpf2go struct {
 	cc string
 	// C flags passed to the compiler.
 	cFlags []string
+	// C types to include in the generatd output.
+	cTypes cTypes
 	// Go tags included in the .go
 	tags string
 	// Base directory of the Makefile. Enables outputting make-style dependencies
@@ -259,12 +276,13 @@ func (b2g *bpf2go) convert(tgt target, arches []string) (err error) {
 	}
 	defer obj.Close()
 
-	err = writeCommon(writeArgs{
-		pkg:   b2g.pkg,
-		ident: b2g.ident,
-		tags:  tags,
-		obj:   objFileName,
-		out:   goFile,
+	err = output(outputArgs{
+		pkg:    b2g.pkg,
+		ident:  b2g.ident,
+		cTypes: b2g.cTypes,
+		tags:   tags,
+		obj:    objFileName,
+		out:    goFile,
 	})
 	if err != nil {
 		return fmt.Errorf("can't write %s: %s", goFileName, err)

@@ -10,11 +10,13 @@ import (
 	"io"
 	"io/ioutil"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 	"unicode"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/internal/btf"
 )
 
 const ebpfModule = "github.com/cilium/ebpf"
@@ -34,6 +36,13 @@ import (
 
 	"{{ .Module }}"
 )
+
+{{- if .Types }}
+{{- range $type := .Types }}
+{{ $.TypeDeclaration (index $.TypeNames $type) $type }}
+
+{{ end }}
+{{- end }}
 
 // {{ .Name.Load }} returns the embedded CollectionSpec for {{ .Name }}.
 func {{ .Name.Load }}() (*ebpf.CollectionSpec, error) {
@@ -176,15 +185,15 @@ func (n templateName) Bytes() string {
 }
 
 func (n templateName) Specs() string {
-	return n.maybeExport(string(n) + "Specs")
+	return string(n) + "Specs"
 }
 
 func (n templateName) ProgramSpecs() string {
-	return n.maybeExport(string(n) + "ProgramSpecs")
+	return string(n) + "ProgramSpecs"
 }
 
 func (n templateName) MapSpecs() string {
-	return n.maybeExport(string(n) + "MapSpecs")
+	return string(n) + "MapSpecs"
 }
 
 func (n templateName) Load() string {
@@ -196,30 +205,31 @@ func (n templateName) LoadObjects() string {
 }
 
 func (n templateName) Objects() string {
-	return n.maybeExport(string(n) + "Objects")
+	return string(n) + "Objects"
 }
 
 func (n templateName) Maps() string {
-	return n.maybeExport(string(n) + "Maps")
+	return string(n) + "Maps"
 }
 
 func (n templateName) Programs() string {
-	return n.maybeExport(string(n) + "Programs")
+	return string(n) + "Programs"
 }
 
 func (n templateName) CloseHelper() string {
 	return "_" + toUpperFirst(string(n)) + "Close"
 }
 
-type writeArgs struct {
-	pkg   string
-	ident string
-	tags  []string
-	obj   string
-	out   io.Writer
+type outputArgs struct {
+	pkg    string
+	ident  string
+	tags   []string
+	cTypes []string
+	obj    string
+	out    io.Writer
 }
 
-func writeCommon(args writeArgs) error {
+func output(args outputArgs) error {
 	obj, err := ioutil.ReadFile(args.obj)
 	if err != nil {
 		return fmt.Errorf("read object file contents: %s", err)
@@ -245,21 +255,52 @@ func writeCommon(args writeArgs) error {
 		programs[name] = identifier(name)
 	}
 
+	var (
+		namedTypes []btf.NamedType
+		names      = make(map[btf.Type]string)
+	)
+	for _, cType := range args.cTypes {
+		typ, err := spec.BTF.Find(cType)
+		if err != nil {
+			return err
+		}
+
+		if _, ok := names[typ]; ok {
+			return fmt.Errorf("duplicate type %s", typ)
+		}
+
+		namedTypes = append(namedTypes, typ)
+		names[typ] = args.ident + identifier(typ.TypeName())
+	}
+
+	sort.Slice(namedTypes, func(i, j int) bool {
+		return namedTypes[i].TypeName() < namedTypes[j].TypeName()
+	})
+
+	gf := btf.NewGoFormatter(names)
+	gf.Identifier = identifier
+
 	ctx := struct {
-		Module   string
-		Package  string
-		Tags     []string
-		Name     templateName
-		Maps     map[string]string
-		Programs map[string]string
-		File     string
+		*btf.GoFormatter
+		Module    string
+		Package   string
+		Tags      []string
+		Name      templateName
+		Maps      map[string]string
+		Programs  map[string]string
+		Types     []btf.NamedType
+		TypeNames map[btf.Type]string
+		File      string
 	}{
+		gf,
 		ebpfModule,
 		args.pkg,
 		args.tags,
 		templateName(args.ident),
 		maps,
 		programs,
+		namedTypes,
+		names,
 		filepath.Base(args.obj),
 	}
 
